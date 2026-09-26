@@ -1,16 +1,22 @@
 import { Chart } from '@/components/Chart';
 import { getFiles, getTotalSpaceUsed } from '@/lib/actions/file.actions';
+import { getCurrentUser } from '@/lib/actions/user.actions';
+import { redirect } from 'next/navigation';
 import { convertFileSize, getUsageSummary } from '@/lib/utils';
 import Link from 'next/link';
 import React from 'react';
 import Image from 'next/image';
 import { Separator } from '@/components/ui/separator';
 import FormattedDateTime from '@/components/FormattedDateTime';
-import { Models } from 'node-appwrite';
 import Thumbnail from '@/components/Thumbnail';
 import ActionDropdown from '@/components/ActionDropdown';
 
 const Dashboard = async () => {
+  const currentUser = await getCurrentUser();
+
+  if (!currentUser) redirect('/sign-in');
+
+  // The list and the totals do not depend on each other.
   const [files, totalSpace] = await Promise.all([
     getFiles({ types: [], limit: 10 }),
     getTotalSpaceUsed(),
@@ -63,7 +69,7 @@ const Dashboard = async () => {
         <h2 className="h3 xl:h2 text-light-100">Recent files uploaded</h2>
         {files.documents.length > 0 ? (
           <ul className="mt-5 flex flex-col gap-5">
-            {files.documents.map((file: Models.Document) => (
+            {files.documents.map((file: FileDocument) => (
               <Link
                 href={file.url}
                 target="_blank"
@@ -84,7 +90,10 @@ const Dashboard = async () => {
                       className="caption"
                     />
                   </div>
-                  <ActionDropdown file={file} />
+                  <ActionDropdown
+                    file={file}
+                    currentUserId={currentUser.$id}
+                  />
                 </div>
               </Link>
             ))}

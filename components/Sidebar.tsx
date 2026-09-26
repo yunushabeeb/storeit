@@ -5,6 +5,8 @@ import Image from 'next/image';
 import { navItems } from '@/constants';
 import { usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
+import { Button } from '@/components/ui/button';
+import { signOutEverywhere } from '@/lib/actions/user.actions';
 
 const Sidebar = ({ fullName, avatar, email }: SidebarProps) => {
   const pathname = usePathname();
@@ -77,6 +79,16 @@ const Sidebar = ({ fullName, avatar, email }: SidebarProps) => {
           <p className="caption">{email}</p>
         </div>
       </div>
+      {/* Ends every session, including other browsers. Hidden on the narrow
+          rail; the header carries the same action until the sidebar is wide. */}
+      <Button
+        type="button"
+        className="mt-3 hidden h-10 w-full rounded-full bg-brand/10 px-3 text-xs text-brand hover:bg-brand/20 lg:flex"
+        title="Sign out everywhere"
+        onClick={() => signOutEverywhere()}
+      >
+        Sign out everywhere
+      </Button>
     </aside>
   );
 };

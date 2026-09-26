@@ -6,7 +6,6 @@ import Image from 'next/image';
 import { Input } from '@/components/ui/input';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { getFiles } from '@/lib/actions/file.actions';
-import { Models } from 'node-appwrite';
 import Thumbnail from '@/components/Thumbnail';
 import FormattedDateTime from '@/components/FormattedDateTime';
 import { useDebounce } from 'use-debounce';
@@ -14,7 +13,7 @@ const Search = () => {
   const [query, setQuery] = useState('');
   const searchParams = useSearchParams();
   const searchQuery = searchParams.get('query') || '';
-  const [results, setResults] = useState<Models.Document[]>([]);
+  const [results, setResults] = useState<FileDocument[]>([]);
   const [open, setOpen] = useState(false);
   const router = useRouter();
   const path = usePathname();
@@ -22,6 +21,8 @@ const Search = () => {
 
   useEffect(() => {
     const fetchFiles = async () => {
+      // An empty box closes the results and drops the query string so the
+      // page underneath is not left filtered by a search the person cleared.
       if (debouncedQuery.length === 0) {
         setResults([]);
         setOpen(false);
@@ -42,12 +43,13 @@ const Search = () => {
     }
   }, [searchQuery]);
 
-  const handleClickItem = (file: Models.Document) => {
+  const handleClickItem = (file: FileDocument) => {
     setOpen(false);
     setResults([]);
 
     router.push(
       `/${
+        // Video and audio share the Media screen. Other types have their own route.
         file.type === 'video' || file.type === 'audio'
           ? 'media'
           : file.type + 's'

@@ -6,13 +6,16 @@ import { getCurrentUser } from '@/lib/actions/user.actions';
 import { redirect } from 'next/navigation';
 import { Toaster } from '@/components/ui/toaster';
 
+// The signed-in user comes from a cookie and the database. A static render
+// would cache one person's layout for the next visitor.
 export const dynamic = 'force-dynamic';
 
 const Layout = async ({ children }: { children: ReactNode }) => {
   // Get the currently signed in user
   const currentUser = await getCurrentUser();
 
-  //  Redirect to signin page if no signed in user
+  // Every page under (root) requires a session. Auth pages live in (auth)
+  // and do not use this layout, so the redirect cannot loop.
   if (!currentUser) return redirect('/sign-in');
 
   return (

@@ -1,3 +1,7 @@
+// Visual primitive from the design system. It does not know about sessions,
+// files, or the bucket. Screens under components/ and app/ decide when it
+// appears and what a click is allowed to do.
+
 import * as React from "react"
 
 import { cn } from "@/lib/utils"

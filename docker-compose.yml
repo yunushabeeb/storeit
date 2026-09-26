@@ -1,0 +1,85 @@
+# Local stand-ins for the production services. Host ports are offset because
+# 5432, 6379, 9000, and 1025 are often already taken on a shared machine.
+# Init SQL runs only when the Postgres volume is empty.
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: storeit-db
+    environment:
+      POSTGRES_USER: storeit
+      POSTGRES_PASSWORD: storeit
+      POSTGRES_DB: storeit
+    ports:
+      - "5436:5432"
+    volumes:
+      - storeit_postgres:/var/lib/postgresql/data
+      - ./docker/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U storeit -d storeit"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  mail:
+    image: axllent/mailpit:latest
+    container_name: storeit-mail
+    ports:
+      - "1026:1025"
+      - "8026:8025"
+
+  redis:
+    image: redis:7-alpine
+    container_name: storeit-redis
+    # AOF keeps rate-limit counters and login challenges across a Redis restart.
+    # Sessions do not live here, so a flush signs nobody out.
+    command: redis-server --appendonly yes
+    ports:
+      - "6380:6379"
+    volumes:
+      - storeit_redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  antivirus:
+    image: clamav/clamav:stable
+    container_name: storeit-antivirus
+    ports:
+      - "3310:3310"
+    volumes:
+      - storeit_clamav:/var/lib/clamav
+    healthcheck:
+      test: ["CMD", "clamdcheck.sh"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 180s
+
+  storage:
+    image: minio/minio:latest
+    container_name: storeit-storage
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: storeit
+      MINIO_ROOT_PASSWORD: storeit-secret
+      # Community MinIO has no per-bucket CORS. This is what lets the browser PUT from the app.
+      MINIO_API_CORS_ALLOW_ORIGIN: http://localhost:3000,http://127.0.0.1:3000
+    ports:
+      - "9010:9000"
+      - "9011:9001"
+    volumes:
+      - storeit_minio:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 5s
+
+volumes:
+  storeit_postgres:
+  storeit_minio:
+  storeit_redis:
+  storeit_clamav:

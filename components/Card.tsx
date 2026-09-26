@@ -1,11 +1,18 @@
-import { Models } from 'node-appwrite';
 import Link from 'next/link';
 import Thumbnail from '@/components/Thumbnail';
 import { convertFileSize } from '@/lib/utils';
 import FormattedDateTime from '@/components/FormattedDateTime';
 import ActionDropdown from '@/components/ActionDropdown';
 
-const Card = ({ file }: { file: Models.Document }) => {
+const Card = ({
+  file,
+  currentUserId,
+}: {
+  file: FileDocument;
+  currentUserId: string;
+}) => {
+  // file.url is a presigned GET that expires. A new tab leaves the library
+  // open. The address points at the bucket, so this is not an app navigation.
   return (
     <Link href={file.url} target="_blank" className="file-card">
       <div className="flex justify-between">
@@ -18,7 +25,7 @@ const Card = ({ file }: { file: Models.Document }) => {
         />
 
         <div className="flex flex-col items-end justify-between">
-          <ActionDropdown file={file} />
+          <ActionDropdown file={file} currentUserId={currentUserId} />
           <p className="body-1">{convertFileSize(file.size)}</p>
         </div>
       </div>

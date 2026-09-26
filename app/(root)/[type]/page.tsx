@@ -1,19 +1,28 @@
 import React from 'react';
 import Sort from '@/components/Sort';
 import { getFiles, getTotalSpaceUsed } from '@/lib/actions/file.actions';
-import { Models } from 'node-appwrite';
+import { getCurrentUser } from '@/lib/actions/user.actions';
 import Card from '@/components/Card';
 import { convertFileSize, getFileTypesParams } from '@/lib/utils';
+import { redirect } from 'next/navigation';
 
 const Page = async ({ searchParams, params }: SearchParamProps) => {
   const type = ((await params)?.type as string) || '';
   const searchText = ((await searchParams)?.query as string) || '';
   const sort = ((await searchParams)?.sort as string) || '';
 
+  const currentUser = await getCurrentUser();
+
+  if (!currentUser) redirect('/sign-in');
+
   const types = getFileTypesParams(type) as FileType[];
 
-  const files = await getFiles({ types, searchText, sort });
-  const totalSize = await getTotalSpaceUsed();
+  // Same pair of reads as the dashboard, scoped to this type. Running them
+  // together keeps the heading size from waiting on the file list.
+  const [files, totalSize] = await Promise.all([
+    getFiles({ types, searchText, sort }),
+    getTotalSpaceUsed(),
+  ]);
 
   const size = types
     .map((type) => {
@@ -42,8 +51,12 @@ const Page = async ({ searchParams, params }: SearchParamProps) => {
       {/* Render the files */}
       {files.total > 0 ? (
         <section className="file-list">
-          {files.documents.map((file: Models.Document) => (
-            <Card key={file.$id} file={file} />
+          {files.documents.map((file: FileDocument) => (
+            <Card
+              key={file.$id}
+              file={file}
+              currentUserId={currentUser.$id}
+            />
           ))}
         </section>
       ) : (

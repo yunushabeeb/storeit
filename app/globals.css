@@ -282,11 +282,123 @@
     @apply subtitle-2 flex-1 !important;
   }
 
+  .share-dialog {
+    animation: none !important;
+  }
+  .share-dialog > button {
+    @apply hidden !important;
+  }
+  .share-board {
+    @apply relative flex items-center !important;
+  }
+  .share-card,
+  .share-detail,
+  .share-gap {
+    transition:
+      transform 480ms cubic-bezier(0.22, 1, 0.36, 1),
+      width 480ms cubic-bezier(0.22, 1, 0.36, 1),
+      opacity 320ms ease;
+  }
+  .share-card {
+    @apply w-[min(400px,calc(100vw-2rem))] shrink-0 rounded-[26px] bg-white px-6 py-8 shadow-drop-1 !important;
+    transform: none;
+  }
+  .share-gap {
+    @apply w-0 shrink-0 !important;
+  }
+  .share-board.is-linked .share-gap {
+    @apply w-[356px] !important;
+  }
+  .share-detail {
+    /* Closed, this card used to sit on top of the share dialog. Its edges
+       and switches showed up there as stray lines. Keep it out of that box
+       until the owner actually opens access. */
+    @apply pointer-events-none absolute right-0 top-1/2 hidden w-[300px] -translate-y-1/2 rounded-[26px] bg-white px-[22px] py-7 shadow-drop-1 !important;
+    transform: translateY(-50%);
+  }
+  .share-board.is-linked .share-detail {
+    @apply pointer-events-auto block opacity-100 !important;
+    animation: share-detail-in 280ms ease;
+  }
+  .share-detail-back {
+    @apply caption mb-4 border-0 bg-transparent p-0 text-brand !important;
+  }
+  .share-connector {
+    @apply pointer-events-none absolute left-0 top-0 hidden overflow-visible !important;
+  }
+  .share-board.is-linked .share-connector {
+    @apply block !important;
+  }
+  .share-connector-path {
+    fill: none;
+    stroke: #fa7275;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-dasharray: 1;
+    stroke-dashoffset: 1;
+    animation: share-draw 420ms ease forwards;
+  }
+  .share-connector-node {
+    fill: #fa7275;
+    stroke: #fff;
+    stroke-width: 2;
+  }
   .share-wrapper {
-    @apply !mt-2 space-y-2 !important;
+    @apply !mt-4 space-y-2 !important;
   }
   .share-input-field {
     @apply body-2 shad-no-focus h-[52px] w-full rounded-full border px-4 shadow-drop-1 !important;
+  }
+  .share-people {
+    @apply mt-1 max-h-60 space-y-1 overflow-y-auto pr-1 !important;
+  }
+  .share-row {
+    @apply flex items-center gap-1 !important;
+  }
+  .share-row-open {
+    @apply flex min-w-0 flex-1 items-center justify-between gap-3 rounded-2xl border-0 bg-transparent px-3 py-2.5 text-left !important;
+  }
+  .share-row-open.is-active {
+    @apply bg-brand/10 !important;
+  }
+  .share-privileges {
+    @apply mt-3 space-y-1 !important;
+  }
+  .share-privilege {
+    @apply flex items-center gap-3 rounded-xl px-1 py-2 !important;
+  }
+  .share-switch {
+    @apply relative h-7 w-12 shrink-0 rounded-full border-0 bg-light-300 p-0 transition-colors !important;
+  }
+  .share-switch-on {
+    @apply bg-brand !important;
+  }
+  .share-switch-locked {
+    @apply cursor-default opacity-100 !important;
+  }
+  .share-switch-thumb {
+    @apply absolute left-0.5 top-0.5 size-6 rounded-full bg-white shadow-sm transition-transform !important;
+  }
+  .share-switch-on .share-switch-thumb {
+    @apply translate-x-5 !important;
+  }
+
+  @media (max-width: 860px) {
+    .share-gap,
+    .share-board.is-linked .share-gap {
+      @apply w-0 !important;
+    }
+    .share-board.is-linked .share-detail {
+      @apply inset-0 h-full w-full translate-x-0 translate-y-0 overflow-y-auto !important;
+      right: auto;
+      top: 0;
+      transform: none !important;
+      z-index: 2;
+    }
+    .share-connector,
+    .share-board.is-linked .share-connector {
+      @apply hidden !important;
+    }
   }
   .share-remove-user {
     @apply rounded-full bg-transparent text-light-100 shadow-none hover:bg-transparent !important;
@@ -307,6 +419,9 @@
   }
   .error-message {
     @apply body-2 mx-auto w-fit rounded-xl bg-error/5 px-8 py-4 text-center text-error !important;
+  }
+  .auth-notice {
+    @apply body-2 mx-auto w-full rounded-xl bg-brand px-8 py-4 text-center font-medium text-white !important;
   }
 
   /* Card */
@@ -356,6 +471,9 @@
 
   .error-toast {
     @apply bg-red !rounded-[10px] !important;
+  }
+  .success-toast {
+    @apply bg-green !rounded-[10px] !important;
   }
 
   /* Header */
@@ -449,6 +567,23 @@
   }
   .thumbnail-image {
     @apply size-full object-cover object-center !important;
+  }
+}
+
+@keyframes share-draw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes share-detail-in {
+  from {
+    opacity: 0;
+    transform: translateY(-50%) translateX(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(-50%);
   }
 }
 

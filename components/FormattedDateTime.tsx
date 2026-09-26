@@ -1,3 +1,5 @@
+// Displays the catalog timestamp. An empty date becomes an em dash in
+// formatDateTime so a category with no files does not render "Invalid Date".
 import React from 'react';
 import { cn, formatDateTime } from '@/lib/utils';
 

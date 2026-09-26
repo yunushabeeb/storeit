@@ -53,6 +53,8 @@ export const Chart = ({ used = 0 }: { used: number }) => {
             <PolarRadiusAxis tick={false} tickLine={false} axisLine={false}>
               <Label
                 content={({ viewBox }) => {
+                  // Recharts types viewBox as a union. The center exists only
+                  // for the polar box this chart actually uses.
                   if (viewBox && 'cx' in viewBox && 'cy' in viewBox) {
                     return (
                       <text

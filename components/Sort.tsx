@@ -15,6 +15,8 @@ const Sort = () => {
   const router = useRouter();
 
   const handleSort = (value: string) => {
+    // The value is one of sortTypes. The server action allow-lists the column
+    // and the direction before they reach SQL.
     router.push(`${path}?sort=${value}`);
   };
 

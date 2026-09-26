@@ -9,10 +9,13 @@ import Image from 'next/image';
 import Thumbnail from '@/components/Thumbnail';
 import { MAX_FILE_SIZE } from '@/constants';
 import { useToast } from '@/hooks/use-toast';
-import { uploadFile } from '@/lib/actions/file.actions';
+import { completeUpload, createUpload } from '@/lib/actions/file.actions';
 import { usePathname } from 'next/navigation';
 
-const FileUploader = ({ ownerId, accountId, className }: FileUploaderProps) => {
+// The browser talks to the bucket directly. createUpload only reserves a
+// row and a URL. completeUpload runs after the PUT, which is when the scan
+// and the files row happen. accountId is unused here; the session owns the upload.
+const FileUploader = ({ ownerId, className }: FileUploaderProps) => {
   const path = usePathname();
   const { toast } = useToast();
   const [files, setFiles] = useState<File[]>([]);
@@ -38,20 +41,56 @@ const FileUploader = ({ ownerId, accountId, className }: FileUploaderProps) => {
           });
         }
 
-        return uploadFile({ file, ownerId, accountId, path }).then(
-          (uploadedFile) => {
-            if (uploadedFile) {
-              setFiles((prevFiles) =>
-                prevFiles.filter((f) => f.name !== file.name),
-              );
-            }
-          },
-        );
+        try {
+          const ticket = await createUpload({
+            name: file.name,
+            size: file.size,
+            ownerId,
+          });
+
+          if (!ticket?.uploadUrl || !ticket.uploadId) {
+            throw new Error(ticket?.error || 'Could not start the upload');
+          }
+
+          const response = await fetch(ticket.uploadUrl, {
+            method: 'PUT',
+            // Must match the content type that was signed. A different header
+            // fails the signature and the bucket rejects the PUT.
+            headers: { 'Content-Type': ticket.contentType },
+            body: file,
+          });
+
+          if (!response.ok) {
+            throw new Error('The storage service rejected the upload');
+          }
+
+          const saved = await completeUpload({
+            uploadId: ticket.uploadId,
+            path,
+          });
+
+          if (saved?.error || !saved?.file) {
+            throw new Error(saved?.error || 'Could not store the file');
+          }
+
+          setFiles((prevFiles) => prevFiles.filter((item) => item.name !== file.name));
+        } catch (error) {
+          setFiles((prevFiles) => prevFiles.filter((item) => item.name !== file.name));
+          toast({
+            description: (
+              <p className="body-2 text-white">
+                <span className="font-semibold">{file.name}</span>{' '}
+                {error instanceof Error ? error.message : 'could not be uploaded.'}
+              </p>
+            ),
+            className: 'error-toast',
+          });
+        }
       });
 
       await Promise.all(uploadPromises);
     },
-    [ownerId, accountId, path],
+    [ownerId, path, toast],
   );
 
   // Dropzone hooks
@@ -105,6 +144,9 @@ const FileUploader = ({ ownerId, accountId, className }: FileUploaderProps) => {
                       width={80}
                       height={26}
                       alt="Loader"
+                      // Next.js refuses to optimize an animated GIF. unoptimized
+                      // keeps the animation and silences that warning.
+                      unoptimized
                     />
                   </div>
                 </div>

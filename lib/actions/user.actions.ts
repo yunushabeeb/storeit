@@ -1,56 +1,72 @@
 'use server';
 
-// Import the required modules
-import { createAdminClient, createSessionClient } from '../appwrite';
-import { appwriteConfig } from '../appwrite/config';
-import { Query, ID } from 'node-appwrite';
-import { parseStringify } from '@/lib/utils';
+// Sign-in is split across Redis (the challenge the browser holds), Postgres
+// (the user, the code hash, the session), and the mail provider. Those three
+// cannot share one transaction. Each step below commits its own store, and
+// the next step is written so a failure does not reveal whether the email exists.
+
+import { randomUUID } from 'node:crypto';
+import postgres from 'postgres';
 import { cookies } from 'next/headers';
-import { avatarPlaceholderUrl } from '@/constants';
 import { redirect } from 'next/navigation';
+import { avatarPlaceholderUrl } from '@/constants';
+import {
+  createUserSession,
+  destroyAllSessions,
+  destroySession,
+  findUserByEmail,
+  getSessionUser,
+  hashOtp,
+  hashesMatch,
+  issueEmailOtp,
+  toPublicUser,
+  verifyEmailOtp,
+} from '@/lib/auth';
+import {
+  deleteLoginChallenge,
+  readLoginChallenge,
+  saveLoginChallenge,
+} from '@/lib/challenges';
+import { getDb } from '@/lib/db';
+import { enforceOtpSendLimit } from '@/lib/rate-limit';
+import { parseStringify } from '@/lib/utils';
 
-// Verify if email is already in use
-const getUserByEmail = async (email: string) => {
-  // Create a new Appwrite client
-  const { databases } = await createAdminClient();
-
-  // Get the user by email
-  const result = await databases.listDocuments(
-    appwriteConfig.databaseId,
-    appwriteConfig.usersCollectionId,
-    [Query.equal('email', [email])],
-  );
-
-  // Return the user if found
-  return result.total > 0 ? result.documents[0] : null;
-};
-
-// Handle errors
 const handleError = (error: unknown, message: string) => {
   console.error(error, message);
-
-  // If the error is a string, throw a new error
   throw error;
 };
 
-// Send email OTP
+const normalizeEmail = (email: string) => email.trim().toLowerCase();
+
+// Returns the challenge id under the name accountId because the form was
+// built against that field. The id is random and expires with the challenge.
+async function beginLogin(email: string, userId: string | null) {
+  const challengeId = randomUUID();
+
+  await saveLoginChallenge(challengeId, { email, userId, attempts: 0 });
+
+  return parseStringify({ accountId: challengeId });
+}
+
 export const sendEmailOTP = async ({ email }: { email: string }) => {
-  // Create a new Appwrite client
-  const { account } = await createAdminClient();
+  const normalizedEmail = normalizeEmail(email);
+  const limited = await enforceOtpSendLimit(normalizedEmail);
 
-  try {
-    // Send the email OTP
-    const session = await account.createEmailToken(ID.unique(), email);
+  if (limited) return parseStringify({ error: limited });
 
-    // return the session
-    return session.userId;
-  } catch (error) {
-    // Handle the error
-    handleError(error, 'Failed to send email OTP');
+  const user = await findUserByEmail(normalizedEmail);
+
+  // Resend is only offered after a real sign-in, which already required an
+  // account. If the account disappeared, say so instead of pretending a code went out.
+  if (!user) {
+    return parseStringify({ error: 'Create an account to get a code.' });
   }
+
+  await issueEmailOtp(user);
+
+  return parseStringify({ ok: true });
 };
 
-// Create an account
 export const createAccount = async ({
   fullName,
   email,
@@ -58,41 +74,67 @@ export const createAccount = async ({
   fullName: string;
   email: string;
 }) => {
-  // Check if the user already exists
-  const existingUser = await getUserByEmail(email);
+  const normalizedEmail = normalizeEmail(email);
+  const limited = await enforceOtpSendLimit(normalizedEmail);
 
-  if (!existingUser) {
-    // Send OTP if user does not exist
-    const accountId = await sendEmailOTP({ email });
+  if (limited) return parseStringify({ accountId: null, error: limited });
 
-    if (!accountId) throw new Error('Failed to send email OTP');
+  const existingUser = await findUserByEmail(normalizedEmail);
 
-    // Create a new Appwrite client
-    const { databases } = await createAdminClient();
-
-    // Create a new user
-    await databases.createDocument(
-      appwriteConfig.databaseId,
-      appwriteConfig.usersCollectionId,
-      ID.unique(),
-      {
-        fullName,
-        email,
-        avatar: avatarPlaceholderUrl,
-        accountId,
-      },
-    );
-
-    // Return the account ID
-    return parseStringify({ accountId });
+  // Sign-up with an existing email is a sign-in. Telling the person the
+  // account already exists would confirm the address is registered.
+  if (existingUser) {
+    await issueEmailOtp(existingUser);
+    return beginLogin(normalizedEmail, existingUser.id);
   }
-  return parseStringify({
-    accountId: null,
-    error: 'A user with this credential already exist. Try signing in.',
-  });
+
+  const accountId = randomUUID();
+
+  try {
+    await getDb()`
+      INSERT INTO users (id, email, full_name, avatar)
+      VALUES (
+        ${accountId},
+        ${normalizedEmail},
+        ${fullName.trim()},
+        ${avatarPlaceholderUrl}
+      )
+    `;
+
+    try {
+      await issueEmailOtp({
+        id: accountId,
+        email: normalizedEmail,
+        full_name: fullName.trim(),
+        avatar: avatarPlaceholderUrl,
+        created_at: new Date(),
+        updated_at: new Date(),
+      });
+    } catch (error) {
+      // The mail send sits outside the database. If it fails, remove the user
+      // so a half-created account is not left behind with no way to sign in.
+      // email_otps references users with ON DELETE CASCADE, so the code row goes too.
+      await getDb()`DELETE FROM users WHERE id = ${accountId}`;
+      throw error;
+    }
+
+    return beginLogin(normalizedEmail, accountId);
+  } catch (error) {
+    // 23505 is a unique violation. Two sign-ups for the same email can pass
+    // the lookup above and one insert then loses. Treat the loser as a sign-in.
+    if (error instanceof postgres.PostgresError && error.code === '23505') {
+      const user = await findUserByEmail(normalizedEmail);
+
+      if (!user) throw error;
+
+      await issueEmailOtp(user);
+      return beginLogin(normalizedEmail, user.id);
+    }
+
+    handleError(error, 'Failed to create account');
+  }
 };
 
-// Verify the email OTP
 export const verifySecret = async ({
   accountId,
   password,
@@ -101,92 +143,103 @@ export const verifySecret = async ({
   password: string;
 }) => {
   try {
-    // Create a new Appwrite client
-    const { account } = await createAdminClient();
+    const challenge = await readLoginChallenge(accountId);
 
-    // Create a new session
-    const session = await account.createSession(accountId, password);
-
-    // Set the session cookie
-    (await cookies()).set('appwrite-session', session.secret, {
-      path: '/',
-      httpOnly: true,
-      sameSite: 'strict',
-      secure: true,
-    });
-
-    // Return the session ID
-    return parseStringify({ sessionId: session.$id });
-  } catch (error) {
-    // Handle the error
-    handleError(error, 'Failed to verify email OTP');
-  }
-};
-
-// Get the current user
-export const getCurrentUser = async () => {
-  try {
-    // Create a new Appwrite client
-    const { databases, account } = await createSessionClient();
-
-    // Get the current account
-    const result = await account.get();
-
-    // Get the user by account ID
-    const user = await databases.listDocuments(
-      appwriteConfig.databaseId,
-      appwriteConfig.usersCollectionId,
-      [Query.equal('accountId', [result.$id])],
-    );
-
-    // If the user is not found, return null
-    if (user.total <= 0) return null;
-
-    // Return the user
-    return parseStringify(user.documents[0]);
-  } catch (error) {
-    // Handle the error
-    handleError(error, 'Failed to get current user');
-  }
-};
-
-// Sign out the user
-export const signOutUser = async () => {
-  // Create a new Appwrite client
-  const { account } = await createSessionClient();
-
-  try {
-    // Delete the current session
-    await account.deleteSession('current');
-    // Delete the session cookie
-    (await cookies()).delete('appwrite-session');
-  } catch (error) {
-    // Handle the error
-    handleError(error, 'Failed to sign out user');
-  } finally {
-    // Redirect to the sign-in page
-    redirect('/sign-in');
-  }
-};
-
-// Sign in the user
-export const signInUser = async ({ email }: { email: string }) => {
-  try {
-    // Check if the user already exists
-    const existingUser = await getUserByEmail(email);
-
-    // If the user already exists, send an email OTP
-    if (existingUser) {
-      await sendEmailOTP({ email });
-
-      // Return the account ID
-      return parseStringify({ accountId: existingUser.accountId });
+    // A missing challenge and a burned challenge must not share a message that
+    // tells the client which of the two it is, except for the attempt limit,
+    // which the person needs in order to request a new code.
+    if (!challenge || challenge.attempts >= 5) {
+      if (challenge) await deleteLoginChallenge(accountId);
+      return parseStringify({
+        sessionId: null,
+        error: challenge
+          ? 'Too many attempts. Request a new code.'
+          : 'Invalid or expired code',
+      });
     }
 
-    // If the user does not exist, return an error
-    return parseStringify({ accountId: null, error: 'User not found' });
+    // No account for this email. Spend the same hash comparison a real code
+    // would, then fail with the same message, so timing and wording stay aligned.
+    if (!challenge.userId) {
+      hashesMatch(hashOtp('000000'), hashOtp(password));
+      await saveLoginChallenge(accountId, {
+        ...challenge,
+        attempts: challenge.attempts + 1,
+      });
+      return parseStringify({ sessionId: null, error: 'Invalid or expired code' });
+    }
+
+    await verifyEmailOtp(challenge.userId, password);
+    const sessionId = await createUserSession(challenge.userId);
+    await deleteLoginChallenge(accountId);
+
+    return parseStringify({ sessionId });
   } catch (error) {
-    // Handle the error
+    const message = error instanceof Error ? error.message : '';
+    // Only the two messages raised on purpose reach the client. A database
+    // error would otherwise leak into the form.
+    const safe =
+      message === 'Invalid or expired code' || message.startsWith('Too many attempts')
+        ? message
+        : 'Failed to verify email OTP';
+
+    return parseStringify({ sessionId: null, error: safe });
+  }
+};
+
+export const getCurrentUser = async () => {
+  try {
+    const user = await getSessionUser();
+
+    if (!user) return null;
+
+    return parseStringify(toPublicUser(user));
+  } catch (error) {
+    console.error(error, 'Failed to get current user');
+    return null;
+  }
+};
+
+async function endSession(destroy: () => Promise<void>) {
+  try {
+    await destroy();
+  } catch (error) {
+    // The cookie is what the browser will send next. Clear it even when the
+    // database delete failed, so this browser is signed out regardless.
+    console.error(error, 'Failed to sign out user');
+    (await cookies()).delete('storeit-session');
+  } finally {
+    redirect('/sign-in');
+  }
+}
+
+export const signOutUser = async () => {
+  await endSession(destroySession);
+};
+
+export const signOutEverywhere = async () => {
+  await endSession(destroyAllSessions);
+};
+
+export const signInUser = async ({ email }: { email: string }) => {
+  try {
+    const normalizedEmail = normalizeEmail(email);
+    const limited = await enforceOtpSendLimit(normalizedEmail);
+
+    if (limited) return parseStringify({ accountId: null, error: limited });
+
+    const existingUser = await findUserByEmail(normalizedEmail);
+
+    // No account yet. The form sends them to sign-up with this address filled
+    // in, instead of asking for a code that can never succeed.
+    if (!existingUser) {
+      return parseStringify({ accountId: null, needsAccount: true });
+    }
+
+    await issueEmailOtp(existingUser);
+
+    return beginLogin(normalizedEmail, existingUser.id);
+  } catch (error) {
     handleError(error, 'Failed to sign in user');
   }
 };

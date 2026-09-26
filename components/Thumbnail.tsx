@@ -9,9 +9,10 @@ export const Thumbnail = ({
   imageClassName,
   className,
 }: ThumbnailProps) => {
+  // SVG is an image type but is not rendered from the file URL. The view URL
+  // is a download, and an inline SVG can carry script. The icon is used instead.
   const isImage = type === 'image' && extension !== 'svg';
 
-  console.log(url);
   return (
     <figure className={cn('thumbnail', className)}>
       <Image

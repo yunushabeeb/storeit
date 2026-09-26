@@ -31,9 +31,11 @@ declare interface RenameFileProps {
   extension: string;
   path: string;
 }
+declare type SharePrivilege = 'view' | 'rename' | 'delete';
+
 declare interface UpdateFileUsersProps {
   fileId: string;
-  emails: string[];
+  shares: { email: string; permissions: SharePrivilege[] }[];
   path: string;
 }
 declare interface DeleteFileProps {
@@ -70,7 +72,7 @@ declare interface ThumbnailProps {
 }
 
 declare interface ShareInputProps {
-  file: Models.Document;
+  file: FileDocument;
   onInputChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
   onRemove: (email: string) => void;
 }
@@ -114,10 +116,45 @@ declare interface FileUploaderProps {
   className?: string;
 }
 
+// The shape every list and card already renders. Actions map a SQL row into
+// this instead of teaching the components about column names.
+declare interface FileDocument {
+  $id: string;
+  $createdAt: string;
+  $updatedAt: string;
+  name: string;
+  url: string;
+  downloadUrl: string;
+  extension: string;
+  size: number;
+  type: FileType | string;
+  users: string[];
+  shares: { email: string; permissions: SharePrivilege[] }[];
+  permissions: SharePrivilege[];
+  access: 'owner' | 'shared';
+  bucketFileId: string;
+  accountId: string;
+  owner: {
+    $id: string;
+    accountId: string;
+    fullName: string;
+    email: string;
+    avatar: string;
+  };
+}
+
 declare type FormType = 'sign-in' | 'sign-up';
 
 declare interface ActionsModalContentProps {
-  file: Models.Document;
-  onInputChange: React.Dispatch<React.SetStateAction<string[]>>;
+  file: FileDocument;
+  recipients: { email: string; permissions: SharePrivilege[] }[];
+  draft: string;
+  draftPermissions: SharePrivilege[];
+  onDraftChange: (value: string) => void;
+  onDraftPermissionsChange: (permissions: SharePrivilege[]) => void;
+  onPermissionsChange: (email: string, permissions: SharePrivilege[]) => void;
   onRemove: (email: string) => void;
+  onCancel: () => void;
+  onShare: () => void;
+  busy?: boolean;
 }

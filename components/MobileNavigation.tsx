@@ -14,7 +14,7 @@ import Link from 'next/link';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import FileUploader from './FileUploader';
-import { signOutUser } from '@/lib/actions/user.actions';
+import { signOutEverywhere, signOutUser } from '@/lib/actions/user.actions';
 import { Separator } from './ui/separator';
 
 const MobileNavigation = ({
@@ -30,6 +30,9 @@ const MobileNavigation = ({
   useEffect(() => {
     const handleResize = () => {
       const isSmorUp = window.matchMedia('(min-width: 640px)').matches;
+
+      // The sidebar takes over at this width. Leaving the sheet open would
+      // show two navigations after a resize.
       if (isSmorUp) {
         setOpen(false);
       }
@@ -115,6 +118,19 @@ const MobileNavigation = ({
 
           <div className="flex flex-col justify-between gap-5 pb-5">
             <FileUploader ownerId={ownerId} accountId={accountId} />
+            <Button
+              type="submit"
+              className="mobile-sign-out-button"
+              onClick={async () => await signOutEverywhere()}
+            >
+              <Image
+                src="/assets/icons/logout.svg"
+                alt="logo"
+                width={24}
+                height={24}
+              />
+              <p>Sign out everywhere</p>
+            </Button>
             <Button
               type="submit"
               className="mobile-sign-out-button"

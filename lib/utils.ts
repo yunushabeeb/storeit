@@ -4,6 +4,8 @@ import { twMerge } from 'tailwind-merge';
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
+// Server actions cannot return Date objects or class instances to the client.
+// A JSON round trip leaves plain data the client components can render.
 export const parseStringify = (value: unknown) =>
   JSON.parse(JSON.stringify(value));
 
@@ -172,16 +174,6 @@ export const getFileIcon = (
   }
 };
 
-// APPWRITE URL UTILS
-// Construct appwrite file URL - https://appwrite.io/docs/apis/rest#images
-export const constructFileUrl = (bucketFileId: string) => {
-  return `${process.env.NEXT_PUBLIC_APPWRITE_ENDPOINT}/storage/buckets/${process.env.NEXT_PUBLIC_APPWRITE_BUCKET}/files/${bucketFileId}/view?project=${process.env.NEXT_PUBLIC_APPWRITE_PROJECT}`;
-};
-
-export const constructDownloadUrl = (bucketFileId: string) => {
-  return `${process.env.NEXT_PUBLIC_APPWRITE_ENDPOINT}/storage/buckets/${process.env.NEXT_PUBLIC_APPWRITE_BUCKET}/files/${bucketFileId}/download?project=${process.env.NEXT_PUBLIC_APPWRITE_PROJECT}`;
-};
-
 // DASHBOARD UTILS
 export const getUsageSummary = (totalSpace: {
   document: { size: number; latestDate: string };
@@ -209,6 +201,8 @@ export const getUsageSummary = (totalSpace: {
       title: 'Media',
       size: totalSpace.video.size + totalSpace.audio.size,
       latestDate:
+        // ISO-8601 strings sort in time order. An empty side loses, so a
+        // category with no files does not hide the other category's date.
         totalSpace.video.latestDate > totalSpace.audio.latestDate
           ? totalSpace.video.latestDate
           : totalSpace.audio.latestDate,
@@ -232,10 +226,12 @@ export const getFileTypesParams = (type: string) => {
     case 'images':
       return ['image'];
     case 'media':
+      // One screen lists both, because the navigation has a single Media item.
       return ['video', 'audio'];
     case 'others':
       return ['other'];
     default:
+      // An unknown segment still renders a list instead of an empty page.
       return ['document'];
   }
 };
