@@ -26,7 +26,10 @@ const Search = () => {
       if (debouncedQuery.length === 0) {
         setResults([]);
         setOpen(false);
-        return router.push(path.replace(searchParams.toString(), ''));
+        // usePathname has no query string, so this drops ?query= after the box is cleared.
+        // Skip the push when the URL is already clean, or a searchParams change loops the effect.
+        if (searchParams.get('query')) router.push(path);
+        return;
       }
 
       const files = await getFiles({ types: [], searchText: debouncedQuery });
@@ -35,7 +38,7 @@ const Search = () => {
     };
 
     fetchFiles();
-  }, [debouncedQuery]);
+  }, [debouncedQuery, path, router, searchParams]);
 
   useEffect(() => {
     if (!searchQuery) {

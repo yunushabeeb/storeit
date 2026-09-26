@@ -7,7 +7,7 @@ const subject = 'Your StoreIt sign-in code';
 // Development always uses Mailpit, even when RESEND_API_KEY is present.
 // The default Resend key only delivers to the account that owns it, which
 // blocks local sign-in for any other address. Production is where Resend runs.
-function useResend() {
+function sendsWithResend() {
   return process.env.NODE_ENV === 'production' && Boolean(process.env.RESEND_API_KEY);
 }
 
@@ -17,7 +17,7 @@ function fromAddress() {
 
   // Resend rejects noreply@storeit.local. The default key may send as
   // onboarding@resend.dev until a domain is verified.
-  if (useResend() && placeholder) {
+  if (sendsWithResend() && placeholder) {
     return 'StoreIt <onboarding@resend.dev>';
   }
 
@@ -103,7 +103,7 @@ function emailShell(title: string, bodyHtml: string) {
 }
 
 async function deliver(message: OutboundMail) {
-  if (useResend()) {
+  if (sendsWithResend()) {
     const resend = new Resend(process.env.RESEND_API_KEY);
     const result = await resend.emails.send({
       from: fromAddress(),
