@@ -5,8 +5,9 @@
     <img src="https://img.shields.io/badge/-TypeScript-black?style=for-the-badge&logoColor=white&logo=typescript&color=3178C6" alt="TypeScript" />
     <img src="https://img.shields.io/badge/-PostgreSQL-black?style=for-the-badge&logoColor=white&logo=postgresql&color=4169E1" alt="PostgreSQL" />
     <img src="https://img.shields.io/badge/-Redis-black?style=for-the-badge&logoColor=white&logo=redis&color=DC382D" alt="Redis" />
-    <img src="https://img.shields.io/badge/-S3_/_R2-black?style=for-the-badge&logoColor=white&logo=amazons3&color=569A31" alt="S3" />
-    <img src="https://img.shields.io/badge/-ClamAV-black?style=for-the-badge&color=0C2C5A" alt="ClamAV" />
+    <img src="https://img.shields.io/badge/-MinIO-black?style=for-the-badge&logoColor=white&logo=minio&color=C72E49" alt="MinIO" />
+    <img src="https://img.shields.io/badge/-Cloudflare_R2-black?style=for-the-badge&logoColor=white&logo=cloudflare&color=F38020" alt="Cloudflare R2" />
+    <img src="https://img.shields.io/badge/-ClamAV-black?style=for-the-badge&logoColor=white&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCI+PHBhdGggZmlsbD0iI2ZmZiIgZD0iTTEyIDEgMyA1djZjMCA1LjU1IDMuODQgMTAuNzQgOSAxMiA1LjE2LTEuMjYgOS02LjQ1IDktMTJWNWwtOS00em0tMS4wOSAxMy41Mkw3LjQgMTEuMDFsMS40MS0xLjQxIDIuMDkgMi4wOSA0LjYtNC42IDEuNDEgMS40MS02IDZ6Ii8+PC9zdmc+&color=0C2C5A" alt="ClamAV" />
   </div>
 
   <h3 align="center">Private file storage with a real backend shape</h3>
@@ -45,6 +46,10 @@ Local development runs the supporting services with Docker Compose. Production u
 | Auth email | Mailpit | Resend (verified domain) |
 | Cleanup | Manual / cron → `POST /api/cron/sweep` | Scheduled HTTP call with `CRON_SECRET` |
 
+### System overview
+
+How the browser, app, and supporting services connect at runtime:
+
 ```mermaid
 flowchart LR
   Browser[Browser]
@@ -64,7 +69,7 @@ flowchart LR
   App --> Mail
 ```
 
-**Responsibilities stay split on purpose:**
+### Responsibilities stay split on purpose
 
 - **Postgres** is the source of truth for users, sessions, files, shares, pending uploads, and deletion intents.
 - **Redis** holds only ephemeral auth challenges and send rate limits — a Redis restart must not sign everyone out.
